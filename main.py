@@ -11,8 +11,7 @@ from app.middleware.compression_middleware import setup_gzip_middleware
 from app.middleware.logging_middleware import log_requests_middleware
 
 # Importar routers
-from app.src.routes.file_upload import router as upload_router
-from app.src.routes.search import router as search_router
+from app.src.routes.routes import api_router
 
 # Configuración para manejar archivos grandes (1GB)
 app = FastAPI(
@@ -35,9 +34,9 @@ setup_gzip_middleware(app)
 app.middleware("http")(add_cors_headers_middleware)
 app.middleware("http")(log_requests_middleware)
 
-# Include routers
-app.include_router(upload_router, prefix="/api", tags=["file-upload"])
-app.include_router(search_router, prefix="/api", tags=["search"])
+
+
+app.include_router(api_router)
 
 @app.get("/")
 async def root():

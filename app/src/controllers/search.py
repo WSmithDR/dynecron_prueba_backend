@@ -5,10 +5,10 @@ from ..services.search_service import search_service
 from ..models.search import SearchResult, SearchStatus, PaginatedSearchResponse
 from typing import List, Dict, Any
 
-router = APIRouter()
+search_controller = APIRouter()
 
-@router.get(
-    "/search",
+@search_controller.get(
+    "/",
     response_model=PaginatedSearchResponse,
     summary="Search documents",
     description="Search for relevant passages in the uploaded documents with pagination"
@@ -35,7 +35,7 @@ async def search(
             detail=f"Error performing search: {str(e)}"
         )
 
-@router.get(
+@search_controller.get(
     "/status",
     response_model=SearchStatus,
     summary="Get search service status",

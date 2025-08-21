@@ -1,0 +1,101 @@
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
+from fastapi.responses import JSONResponse
+from typing import List, Dict, Any
+import asyncio
+import logging
+
+from ..services.file_service import FileService
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Create router without prefix (will be added in routes.py)
+file_upload_controller = APIRouter()
+
+def get_file_service():
+    """Dependency for getting file service instance"""
+    return FileService(upload_folder="data")
+
+@file_upload_controller.post("/")
+async def procesar_archivos(
+    files: List[UploadFile] = File(...),
+    file_service: FileService = Depends(get_file_service)
+):
+    """
+    Endpoint para procesar múltiples archivos.
+    
+    Args:
+        files: Lista de archivos a procesar
+        file_service: Injected file service instance
+        
+    Returns:
+        JSON con los resultados del procesamiento
+    """
+    if not files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se han proporcionado archivos para procesar"
+        )
+    
+    try:
+        # Procesar archivos en paralelo
+        tasks = [file_service.process_uploaded_file(file) for file in files]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Procesar resultados
+        archivos_procesados = []
+        errores = []
+        
+        for file, result in zip(files, results):
+            if isinstance(result, Exception):
+                errores.append({
+                    "archivo": file.filename,
+                    "error": str(result)
+                })
+            elif result.get("procesado_exitoso", False):
+                archivos_procesados.append({
+                    "archivo": result["archivo"],
+                    "ruta": result["ruta"],
+                    "tamano_bytes": result["tamano_bytes"],
+                    "tipo": result["tipo"],
+                    "num_caracteres": result["num_caracteres"]
+                })
+            else:
+                errores.append({
+                    "archivo": result.get("archivo", file.filename),
+                    "error": result.get("error", "Error desconocido")
+                })
+        
+        # Construir respuesta
+        response = {
+            'archivos_procesados': [{
+                'archivo': p['archivo'],
+                'ruta': p['ruta'],
+                'tamano_bytes': p['tamano_bytes'],
+                'tipo': p.get('tipo', 'application/octet-stream'),
+                'num_caracteres': p.get('num_caracteres', 0)
+            } for p in archivos_procesados],
+            'errores': [{
+                'archivo': e.get('archivo', 'archivo_desconocido'),
+                'error': str(e.get('error', 'Error desconocido'))
+            } for e in errores],
+            'total_procesados': len(archivos_procesados),
+            'total_errores': len(errores)
+        }
+        
+        # Agregar encabezados CORS
+        headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        }
+        
+        return JSONResponse(content=response, headers=headers)
+    
+    except Exception as e:
+        logger.error(f"Error al procesar archivos: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al procesar los archivos: {str(e)}"
+        )
