@@ -1,4 +1,5 @@
 import os
+import re
 import json
 from typing import List, Dict, Any, Tuple
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -10,10 +11,13 @@ from ..utils.text_utils import clean_text, split_into_chunks
 class SearchService:
     def __init__(self, data_folder: str = "data"):
         self.data_folder = data_folder
+        # Using custom token pattern to better handle Spanish words with accents
         self.vectorizer = TfidfVectorizer(
-            stop_words='english',
+            token_pattern=r'(?u)\b\w[\w-]*\w\b',
             ngram_range=(1, 2),
-            max_features=10000
+            max_features=10000,
+            strip_accents='unicode',
+            lowercase=True
         )
         self.documents = []
         self.doc_metadata = []
@@ -23,6 +27,8 @@ class SearchService:
         """Process content into clean, meaningful chunks"""
         # Clean the content first
         cleaned = clean_text(content)
+        # Normalize unicode characters and lowercase for better matching
+        cleaned = cleaned.lower()
         # Split into sentence-based chunks
         return split_into_chunks(cleaned)
 
@@ -129,9 +135,19 @@ class SearchService:
             }
             
         try:
-            # Preprocess query
-            query = query.strip()
-            query_terms = query.lower().split()
+            # Preprocess query - normalize and clean
+            query = query.strip().lower()
+            # Normalize unicode characters and split into terms
+            query_terms = re.findall(r'\b[\w-]+\b', query, re.UNICODE)
+            # If no valid terms after processing, return empty results
+            if not query_terms:
+                return {
+                    'results': [],
+                    'total': 0,
+                    'page': page,
+                    'page_size': page_size,
+                    'total_pages': 0
+                }
             
             # Transform query to TF-IDF vector
             query_vec = self.vectorizer.transform([query])
