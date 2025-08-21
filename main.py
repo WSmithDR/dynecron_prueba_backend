@@ -1,18 +1,16 @@
 from fastapi import FastAPI, UploadFile, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware import Middleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
-from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-import time
 import logging
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Importar middlewares
+from app.middleware.cors_middleware import setup_cors_middleware, add_cors_headers_middleware
+from app.middleware.compression_middleware import setup_gzip_middleware
+from app.middleware.logging_middleware import log_requests_middleware
+
+# Importar routers
 from app.src.routes.file_upload import router as upload_router
 from app.src.routes.search import router as search_router
 
@@ -26,57 +24,16 @@ app = FastAPI(
     debug=True
 )
 
-# Configuración de middlewares
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # En producción, reemplaza con la URL de tu frontend
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],  # Asegura que todos los encabezados estén expuestos
-    max_age=3600,
-)
-
-# Middleware para compresión de respuestas
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-
 # Configuración para manejo de archivos grandes
 app.router.default_max_request_size = 1024 * 1024 * 1024  # 1GB
 
-# Middleware para manejar CORS en respuestas de error
-@app.middleware("http")
-async def add_cors_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    return response
+# Configuración de middlewares
+setup_cors_middleware(app)
+setup_gzip_middleware(app)
 
-# Middleware para logging
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    start_time = time.time()
-    
-    try:
-        response = await call_next(request)
-        process_time = (time.time() - start_time) * 1000
-        logger.info(
-            f"{request.method} {request.url.path} - "
-            f"{response.status_code} - "
-            f"{process_time:.2f}ms"
-        )
-        return response
-    except Exception as e:
-        logger.error(f"Error in request: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"detail": "Internal server error"},
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-                "Access-Control-Allow-Headers": "*"
-            }
-        )
+# Añadir middlewares personalizados
+app.middleware("http")(add_cors_headers_middleware)
+app.middleware("http")(log_requests_middleware)
 
 # Include routers
 app.include_router(upload_router, prefix="/api", tags=["file-upload"])
