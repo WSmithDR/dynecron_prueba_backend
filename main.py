@@ -5,6 +5,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from app.src.routes.file_upload import router as upload_router
+from app.src.routes.search import router as search_router
 
 # Configuración para manejar archivos grandes (1GB)
 app = FastAPI(
@@ -34,6 +35,7 @@ app.router.default_max_request_size = 1024 * 1024 * 1024  # 1GB
 
 # Include routers
 app.include_router(upload_router, prefix="/api", tags=["file-upload"])
+app.include_router(search_router, prefix="/api", tags=["search"])
 
 @app.get("/")
 async def root():
