@@ -93,25 +93,40 @@ class SearchService:
             
         return result
     
-    def search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def search(self, query: str, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
         """
-        Search for relevant passages in the documents
+        Search for relevant passages in the documents with pagination
         
         Args:
             query: Search query string
-            top_k: Maximum number of results to return
+            page: Page number (1-based)
+            page_size: Number of results per page
             
         Returns:
-            List of dictionaries containing:
-            - text: The relevant text snippet
-            - document_name: Name of the source document
-            - relevance_score: Float between 0 and 1 indicating match quality
+            Dictionary containing:
+            - results: List of search results
+            - total: Total number of results
+            - page: Current page number
+            - page_size: Number of results per page
+            - total_pages: Total number of pages
         """
         if not query.strip():
-            return []
+            return {
+                'results': [],
+                'total': 0,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': 0
+            }
             
         if not self.documents or self.tfidf_matrix is None:
-            return []
+            return {
+                'results': [],
+                'total': 0,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': 0
+            }
             
         try:
             # Preprocess query
@@ -121,18 +136,26 @@ class SearchService:
             # Transform query to TF-IDF vector
             query_vec = self.vectorizer.transform([query])
             
-            # Calculate cosine similarity
+            # Calculate cosine similarity for all documents
             similarities = cosine_similarity(query_vec, self.tfidf_matrix).flatten()
             
-            # Get top K results with similarity > 0
-            top_indices = np.argsort(similarities)[::-1][:top_k]
+            # Get all results with similarity > 0, sorted by score (descending)
+            valid_indices = [i for i, score in enumerate(similarities) if score > 0]
+            valid_scores = [float(similarities[i]) for i in valid_indices]
+            
+            # Sort by score in descending order
+            sorted_indices = [i for _, i in sorted(zip(valid_scores, valid_indices), reverse=True)]
+            total_results = len(sorted_indices)
+            total_pages = (total_results + page_size - 1) // page_size
+            
+            # Calculate pagination bounds
+            start_idx = (page - 1) * page_size
+            end_idx = start_idx + page_size
+            page_indices = sorted_indices[start_idx:end_idx]
             
             results = []
-            for idx in top_indices:
+            for idx in page_indices:
                 score = float(similarities[idx])
-                if score <= 0:
-                    continue
-                    
                 meta = self.doc_metadata[idx]
                 
                 # Format the text to show context around query terms
@@ -140,19 +163,28 @@ class SearchService:
                 
                 results.append({
                     'text': formatted_text,
-                    'document_name': meta['document_name'],
-                    'relevance_score': round(score, 4)  # Round to 4 decimal places
+                    'documentName': meta['document_name'],  # Changed to match frontend
+                    'relevanceScore': round(score, 4)  # Changed to camelCase for frontend
                 })
-                
-                # If we have enough high-quality results, return early
-                if len(results) >= top_k:
-                    break
-                    
-            return results
+            
+            return {
+                'results': results,
+                'total': total_results,
+                'page': page,
+                'pageSize': page_size,  # camelCase for consistency
+                'totalPages': total_pages  # camelCase for consistency
+            }
             
         except Exception as e:
             print(f"Error during search: {str(e)}")
-            return []
+            return {
+                'results': [],
+                'total': 0,
+                'page': page,
+                'pageSize': page_size,
+                'totalPages': 0,
+                'error': str(e)
+            }
 
 # Singleton instance
 search_service = SearchService()
