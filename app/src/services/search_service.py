@@ -2,20 +2,27 @@ import os
 import re
 import json
 from typing import List, Dict, Any, Tuple
+from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
+from ..config.settings import UPLOAD_DIR, SEARCH_CONFIG
 from ..utils.text_utils import clean_text, split_into_chunks
 
 class SearchService:
-    def __init__(self, data_folder: str = "data"):
-        self.data_folder = data_folder
+    def __init__(self, data_folder: Path = UPLOAD_DIR):
+        """Initialize the search service with the specified data folder.
+        
+        Args:
+            data_folder: Path to the directory containing document data
+        """
+        self.data_folder = Path(data_folder)
         # Using custom token pattern to better handle Spanish words with accents
         self.vectorizer = TfidfVectorizer(
             token_pattern=r'(?u)\b\w[\w-]*\w\b',
             ngram_range=(1, 2),
-            max_features=10000,
+            max_features=SEARCH_CONFIG["max_results"],
             strip_accents='unicode',
             lowercase=True
         )
@@ -32,20 +39,34 @@ class SearchService:
         # Split into sentence-based chunks
         return split_into_chunks(cleaned)
 
-    def load_documents(self):
-        """Load and index all documents from the data folder"""
+    def reload_documents(self):
+        """Clear and reload all documents from the data folder"""
         self.documents = []
         self.doc_metadata = []
+        self.load_documents()
         
-        if not os.path.exists(self.data_folder):
-            os.makedirs(self.data_folder, exist_ok=True)
+    def load_documents(self):
+        """Load and index all documents from the data folder"""
+        # Ensure the data directory exists
+        self.data_folder.mkdir(parents=True, exist_ok=True)
+        
+        # Debug: Log the data folder path and its contents
+        print(f"\n=== Loading documents from: {self.data_folder.absolute()} ===")
+        print(f"Directory exists: {self.data_folder.exists()}")
+        print(f"Directory contents: {list(self.data_folder.glob('*'))}")
+        
+        if not any(self.data_folder.iterdir()):
+            print("No files found in data directory")
             return
             
         for filename in os.listdir(self.data_folder):
             if filename.endswith('.json'):
                 try:
-                    with open(os.path.join(self.data_folder, filename), 'r', encoding='utf-8') as f:
+                    file_path = os.path.join(self.data_folder, filename)
+                    print(f"\nProcessing file: {file_path}")
+                    with open(file_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
+                    print(f"Loaded JSON data from {filename}")
                     
                     # Process content into clean chunks
                     content = data.get('contenido', '')
@@ -66,7 +87,11 @@ class SearchService:
                     print(f"Error loading {filename}: {str(e)}")
         
         if self.documents:
+            print(f"\nFound {len(self.documents)} document chunks to index")
             self.tfidf_matrix = self.vectorizer.fit_transform(self.documents)
+            print(f"TF-IDF matrix created with shape: {self.tfidf_matrix.shape}")
+        else:
+            print("\nNo valid document chunks found to index")
     
     def _format_result(self, text: str, query_terms: List[str], max_length: int = 300) -> str:
         """Format search result to show context around query terms"""

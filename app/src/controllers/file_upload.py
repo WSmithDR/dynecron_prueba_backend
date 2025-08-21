@@ -5,6 +5,7 @@ import asyncio
 import logging
 
 from ..services.file_service import FileService
+from ..services.search_service import search_service
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,6 +48,9 @@ async def procesar_archivos(
         archivos_procesados = []
         errores = []
         
+        # Verificar si se procesó al menos un archivo correctamente
+        any_success = False
+        
         for file, result in zip(files, results):
             if isinstance(result, Exception):
                 errores.append({
@@ -61,14 +65,28 @@ async def procesar_archivos(
                     "tipo": result["tipo"],
                     "num_caracteres": result["num_caracteres"]
                 })
+                any_success = True
             else:
                 errores.append({
                     "archivo": result.get("archivo", file.filename),
                     "error": result.get("error", "Error desconocido")
                 })
         
+        # Si se procesó al menos un archivo correctamente, recargar el índice de búsqueda
+        if any_success:
+            try:
+                search_service.reload_documents()
+                logger.info("Índice de búsqueda actualizado correctamente")
+            except Exception as e:
+                logger.error(f"Error al actualizar el índice de búsqueda: {str(e)}")
+                errores.append({
+                    'archivo': 'Sistema',
+                    'error': f'Error al actualizar el índice de búsqueda: {str(e)}'
+                })
+        
         # Construir respuesta
         response = {
+            'mensaje': 'Procesamiento completado',
             'archivos_procesados': [{
                 'archivo': p['archivo'],
                 'ruta': p['ruta'],

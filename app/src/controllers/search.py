@@ -2,13 +2,12 @@ from fastapi import APIRouter, Query, HTTPException, status
 from datetime import datetime
 import platform
 from ..services.search_service import search_service
-from ..models.search import SearchResult, SearchStatus, PaginatedSearchResponse
-from typing import List, Dict, Any
+from ..models.search import SearchStatus, PaginatedSearchResponse
 
 search_controller = APIRouter()
 
 @search_controller.get(
-    "/",
+    "",
     response_model=PaginatedSearchResponse,
     summary="Search documents",
     description="Search for relevant passages in the uploaded documents with pagination"
