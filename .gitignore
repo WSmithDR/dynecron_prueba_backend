@@ -280,4 +280,4 @@ $RECYCLE.BIN/
 #virtual environment
 *venv
 
-/uploads/*
+/data/*
