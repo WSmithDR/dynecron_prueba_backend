@@ -184,3 +184,110 @@ class FileService:
     def _is_extension_allowed(self, filename: str) -> bool:
         """Verifica si la extensión del archivo está permitida."""
         return '.' in filename and filename.rsplit('.', 1)[1].lower() in self.ALLOWED_EXTENSIONS
+    
+    async def list_uploaded_files(self) -> List[Dict[str, Any]]:
+        """
+        Lista todos los archivos subidos y procesados.
+        
+        Returns:
+            Lista de diccionarios con información de los archivos
+        """
+        try:
+            files = []
+            for filename in os.listdir(self.upload_folder):
+                if filename.endswith('.json'):
+                    file_path = os.path.join(self.upload_folder, filename)
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            files.append({
+                                'id': filename,
+                                'name': data.get('metadata', {}).get('nombre_original', filename),
+                                'size': data.get('metadata', {}).get('tamano_bytes', 0),
+                                'upload_date': data.get('metadata', {}).get('fecha_creacion', ''),
+                                'content_type': data.get('metadata', {}).get('tipo_contenido', ''),
+                                'num_characters': data.get('metadata', {}).get('num_caracteres', 0),
+                                'path': file_path
+                            })
+                    except (json.JSONDecodeError, KeyError) as e:
+                        print(f"Error al leer el archivo {filename}: {str(e)}")
+                        continue
+            return files
+        except Exception as e:
+            print(f"Error al listar archivos: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error al listar archivos: {str(e)}"
+            )
+    
+    async def delete_file(self, file_id: str) -> Dict[str, Any]:
+        """
+        Elimina un archivo subido.
+        
+        Args:
+            file_id: Nombre del archivo a eliminar
+            
+        Returns:
+            Dict con el resultado de la operación
+        """
+        try:
+            # Prevenir path traversal
+            if '..' in file_id or '/' in file_id or '\\' in file_id:
+                raise ValueError("Nombre de archivo no válido")
+                
+            file_path = os.path.join(self.upload_folder, file_id)
+            
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"El archivo {file_id} no existe")
+                
+            os.remove(file_path)
+            return {
+                "success": True,
+                "message": f"Archivo {file_id} eliminado correctamente",
+                "file_id": file_id
+            }
+            
+        except FileNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e)
+            )
+        except Exception as e:
+            print(f"Error al eliminar el archivo {file_id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error al eliminar el archivo: {str(e)}"
+            )
+    
+    async def delete_all_files(self) -> Dict[str, Any]:
+        """
+        Elimina todos los archivos subidos.
+        
+        Returns:
+            Dict con el resultado de la operación
+        """
+        try:
+            deleted_files = []
+            for filename in os.listdir(self.upload_folder):
+                if filename.endswith('.json'):
+                    file_path = os.path.join(self.upload_folder, filename)
+                    try:
+                        os.remove(file_path)
+                        deleted_files.append(filename)
+                    except Exception as e:
+                        print(f"Error al eliminar el archivo {filename}: {str(e)}")
+                        continue
+            
+            return {
+                "success": True,
+                "message": f"Se eliminaron {len(deleted_files)} archivos correctamente",
+                "deleted_files": deleted_files,
+                "total_deleted": len(deleted_files)
+            }
+            
+        except Exception as e:
+            print(f"Error al eliminar archivos: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error al eliminar archivos: {str(e)}"
+            )

@@ -1,6 +1,6 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends, Query
 from fastapi.responses import JSONResponse
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import asyncio
 import logging
 
@@ -109,11 +109,99 @@ async def procesar_archivos(
             'Access-Control-Allow-Headers': 'Content-Type, Authorization'
         }
         
-        return JSONResponse(content=response, headers=headers)
+        return JSONResponse(content=response, status_code=status.HTTP_200_OK, headers=headers)
     
     except Exception as e:
-        logger.error(f"Error al procesar archivos: {str(e)}")
+        logger.error(f"Error en el procesamiento: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al procesar los archivos: {str(e)}"
+            detail=f"Error en el procesamiento: {str(e)}"
+        )
+
+@file_upload_controller.get("/files", response_model=List[Dict[str, Any]])
+async def listar_archivos(
+    file_service: FileService = Depends(get_file_service)
+):
+    """
+    Endpoint para listar todos los archivos subidos.
+    
+    Returns:
+        Lista de archivos con sus metadatos
+    """
+    try:
+        files = await file_service.list_uploaded_files()
+        return files
+    except Exception as e:
+        logger.error(f"Error al listar archivos: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al listar archivos: {str(e)}"
+        )
+
+@file_upload_controller.delete("/files/{file_id}")
+async def eliminar_archivo(
+    file_id: str,
+    file_service: FileService = Depends(get_file_service)
+):
+    """
+    Endpoint para eliminar un archivo específico.
+    
+    Args:
+        file_id: ID del archivo a eliminar
+        
+    Returns:
+        Resultado de la operación
+    """
+    try:
+        result = await file_service.delete_file(file_id)
+        # Recargar el índice de búsqueda después de eliminar
+        try:
+            reload_search_index()
+        except Exception as e:
+            logger.warning(f"No se pudo actualizar el índice de búsqueda: {str(e)}")
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error al eliminar archivo {file_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al eliminar el archivo: {str(e)}"
+        )
+
+@file_upload_controller.delete("/files")
+async def eliminar_todos_los_archivos(
+    confirm: bool = Query(..., description="Debe ser True para confirmar la eliminación"),
+    file_service: FileService = Depends(get_file_service)
+):
+    """
+    Endpoint para eliminar todos los archivos subidos.
+    
+    Args:
+        confirm: Debe ser True para confirmar la eliminación
+        
+    Returns:
+        Resultado de la operación
+    """
+    if not confirm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Se requiere confirmación para eliminar todos los archivos"
+        )
+        
+    try:
+        result = await file_service.delete_all_files()
+        # Recargar el índice de búsqueda después de eliminar
+        try:
+            reload_search_index()
+        except Exception as e:
+            logger.warning(f"No se pudo actualizar el índice de búsqueda: {str(e)}")
+            
+        return result
+    except Exception as e:
+        logger.error(f"Error al eliminar todos los archivos: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al eliminar los archivos: {str(e)}"
         )
