@@ -1,4 +1,3 @@
-"""Client utilities for QA service."""
 import os
 from openai import OpenAI
 

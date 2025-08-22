@@ -1,9 +1,15 @@
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 from ..services.search_service import search_service
 from ..models.qa_models import QAResponse, AnswerCitation
 from ..exceptions.qa_exceptions import NoDocumentsLoadedError, AnswerGenerationError
-from ..utils.qa_utils import check_documents_exist, generate_answer_with_llm
+from ..utils.qa_utils import (
+    check_documents_exist, 
+    generate_answer_with_llm, 
+    create_citations, 
+    extract_keywords,
+    clean_response
+)
 
 
 # Configurar logger
@@ -49,17 +55,31 @@ async def answer_question(question: str) -> QAResponse:
         context = list(unique_docs.values())
         
         # Generar respuesta usando el LLM con todo el contenido
-        answer_text = await generate_answer_with_llm(question, context)
+        llm_response = await generate_answer_with_llm(question, context)
         
-        # Crear citas para los documentos usados como contexto
-        citations = []
-        for doc in list(unique_docs.values())[:3]:  # Limitar a 3 documentos como referencia
-            citations.append(AnswerCitation(
-                source=doc['source'],
-                content=doc['content'][:200] + '...' if len(doc['content']) > 200 else doc['content'],
-                page=None,
-                score=1.0
-            ))
+        # Extraer las palabras clave y limpiar la respuesta
+        keywords = extract_keywords(llm_response)
+        answer_text = clean_response(llm_response)
+        
+        logger.info(f"Respuesta generada para: {question}")
+        logger.info(f"Respuesta: {answer_text}")
+        logger.info(f"Palabras clave extraídas: {keywords}")
+        
+        # Crear un formato de resultados de búsqueda compatible con la función de citas
+        search_results = {
+            'results': [
+                {
+                    'text': doc['content'],
+                    'documentName': doc['source'],
+                    'relevanceScore': 1.0  # Puntuación máxima ya que son los documentos completos
+                }
+                for doc in unique_docs.values()
+            ]
+        }
+        
+        # Generar citas mejoradas usando las palabras clave
+        citations = create_citations(search_results, keywords)
+        logger.info(f"Generadas {len(citations)} citas usando {len(keywords)} palabras clave")
         
         return QAResponse(
             answer=answer_text,
