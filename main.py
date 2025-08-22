@@ -1,5 +1,17 @@
 from fastapi import FastAPI
 import logging
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+env_path = Path(__file__).parent / '.env'
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+    print(f"Loaded environment variables from {env_path}")
+else:
+    # Fallback to default .env loading
+    load_dotenv()
+    print("Using default .env file location")
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
