@@ -110,26 +110,52 @@ def create_citations(search_results: Dict[str, Any], keywords: Optional[List[str
     for result in search_results.get('results', []):
         content = result.get('text', '')
         source = result.get('documentName', 'Documento desconocido')
+        doc_id = result.get('document_id', '')
+        chunk_index = result.get('chunk_index', 0)
+        
+        # Crear una clave única para identificar la fuente
+        source_key = f"{source}_{doc_id}"
         
         # Evitar duplicados
-        if source in seen_sources:
+        if source_key in seen_sources:
             continue
             
-        seen_sources.add(source)
+        seen_sources.add(source_key)
         
         # Mejorar el fragmento de texto basado en palabras clave
         improved_content = find_best_matching_snippet(content, keywords) if keywords else content[:500]
         
+        # Añadir información adicional sobre la fuente
+        source_info = f"{source}"
+        if doc_id:
+            source_info += f" (ID: {doc_id})"
+        
+        # Crear la cita con metadatos adicionales
         citation = AnswerCitation(
-            source=source,
+            source=source_info,
             content=improved_content,
-            score=result.get('relevanceScore')
+            score=result.get('relevanceScore'),
+            page=chunk_index + 1  # Usar el índice del chunk como número de página
         )
+        
+        # Asegurar que el contenido no esté vacío
+        if not citation.content.strip():
+            citation.content = f"Fragmento relevante del documento {source_info}"
+            
         citations.append(citation)
         
-        # Limitar el número de citas
+        # Limitar el número de citas pero asegurar al menos 1 si hay resultados
         if len(citations) >= 3:  # Máximo 3 citas
             break
+    
+    # Si no hay citas pero hay resultados, crear una cita genérica
+    if not citations and search_results.get('results'):
+        result = search_results['results'][0]
+        citations.append(AnswerCitation(
+            source=result.get('documentName', 'Documento'),
+            content="Información obtenida del documento cargado.",
+            score=result.get('relevanceScore', 1.0)
+        ))
             
-    logger.debug(f"Generadas {len(citations)} citas con {len(keywords)} palabras clave")
+    logger.info(f"Generadas {len(citations)} citas con {len(keywords)} palabras clave")
     return citations

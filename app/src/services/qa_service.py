@@ -66,15 +66,22 @@ async def answer_question(question: str) -> QAResponse:
         logger.info(f"Respuesta: {answer_text}")
         logger.info(f"Palabras clave extraídas: {keywords}")
         
-        # Crear un formato de resultados de búsqueda compatible con la función de citas
+        # Crear un formato de resultados de búsqueda con metadatos completos para citas
         search_results = {
             'results': [
                 {
-                    'text': doc['content'],
-                    'documentName': doc['source'],
-                    'relevanceScore': 1.0  # Puntuación máxima ya que son los documentos completos
+                    'text': doc.get('content', ''),
+                    'documentName': doc.get('source', 'Documento'),
+                    'document_id': doc_id,  # Incluir el ID del documento
+                    'chunk_index': doc.get('chunk_index', 0),  # Incluir índice del chunk
+                    'relevanceScore': 1.0,  # Puntuación máxima ya que son los documentos completos
+                    'metadata': {
+                        'source': doc.get('source', ''),
+                        'document_id': doc_id,
+                        'chunk_index': doc.get('chunk_index', 0)
+                    }
                 }
-                for doc in unique_docs.values()
+                for doc_id, doc in unique_docs.items()
             ]
         }
         
