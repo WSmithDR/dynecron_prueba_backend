@@ -4,6 +4,9 @@ import os
 import json
 import logging
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+from openai import OpenAI
+from dotenv import load_dotenv
 
 from ..config.settings import UPLOAD_DIR, SEARCH_CONFIG
 from ..services.search_service import search_service
@@ -14,9 +17,14 @@ from ..exceptions.qa_exceptions import (
     DocumentProcessingError
 )
 
+# Cargar variables de entorno
+load_dotenv()
+
 # Configurar logger
 logger = logging.getLogger(__name__)
 
+# Initialize the OpenAI client
+_client = None
 
 def _check_documents_exist() -> bool:
     """
@@ -39,26 +47,94 @@ def _check_documents_exist() -> bool:
         logger.error(error_msg, exc_info=True)
         return False
 
+def _get_client() -> OpenAI:
+    """Get or initialize the OpenAI client with Hugging Face's inference API."""
+    global _client
+    if _client is None:
+        hf_token = os.getenv("HF_TOKEN")
+        if not hf_token:
+            raise ValueError("HF_TOKEN no está configurado en las variables de entorno")
+            
+        _client = OpenAI(
+            base_url="https://router.huggingface.co/v1",
+            api_key=hf_token,
+        )
+    return _client
+
+def _format_json_for_prompt(data: Any, indent: int = 0) -> str:
+    """Formatea datos JSON para mostrarlos en el prompt."""
+    if isinstance(data, dict):
+        return '\n'.join([
+            f"{'  ' * indent}{key} ({type(value).__name__}): {_format_json_for_prompt(value, indent + 1)}"
+            for key, value in data.items()
+        ])
+    elif isinstance(data, list):
+        return '\n'.join([
+            f"{'  ' * indent}- {_format_json_for_prompt(item, indent + 1)}"
+            for item in data
+        ])
+    else:
+        return str(data)
+
 async def _generate_answer_with_llm(question: str, context: List[Dict[str, Any]]) -> str:
     """
-    Genera una respuesta usando el contexto proporcionado.
-    Esta es una implementación simulada que puede reemplazarse con una llamada real a un LLM.
+    Genera una respuesta basada en los datos proporcionados usando el modelo de Hugging Face.
+    
+    Args:
+        question: La pregunta sobre los datos
+        context: Lista de documentos JSON
+        
+    Returns:
+        str: Respuesta generada por el modelo de lenguaje
     """
     if not context:
-        return "No encuentro esa información en los documentos cargados."
+        return "No encuentro información en los documentos cargados."
 
-    # Simulamos una operación asíncrona
-    await asyncio.sleep(0.1)
-    
-    # En una implementación real, esto llamaría a una API de LLM de forma asíncrona
-    sources = list(set([doc['source'] for doc in context]))
-    source_references = ", ".join(f"[Fuente {i+1}]" for i in range(len(sources)))
-    
-    return (
-        f"Basado en la información disponible: {context[0]['content'][:150]}... "
-        f"{source_references}. "
-        "(Nota: Esta es una respuesta de demostración. En producción, se usaría un modelo de lenguaje real.)"
-    )
+    try:
+        # Tomar el primer documento del contexto
+        json_data = context[0].get('content', {})
+        
+        # Formatear los datos JSON para el prompt
+        formatted_data = _format_json_for_prompt(json_data)
+        
+        # Crear el mensaje para el modelo
+        messages = [
+            {
+                "role": "system",
+                "content": "Eres un asistente útil que responde preguntas basándose en los datos proporcionados."
+            },
+            {
+                "role": "user",
+                "content": f"""Analiza los siguientes datos y responde la pregunta de manera concisa.
+                
+Datos:
+{formatted_data}
+
+Pregunta: {question}
+
+Respuesta:"""
+            }
+        ]
+        
+        # Obtener el cliente de OpenAI configurado para Hugging Face
+        client = _get_client()
+        
+        # Realizar la petición a la API
+        completion = client.chat.completions.create(
+            model="openai/gpt-oss-120b:fireworks-ai",
+            messages=messages,
+            max_tokens=300,
+            temperature=0.1,
+            top_p=0.9
+        )
+        
+        # Extraer y retornar la respuesta
+        answer = completion.choices[0].message.content.strip()
+        return answer if answer else "No encontré información específica sobre eso en los datos."
+        
+    except Exception as e:
+        logger.error(f"Error al generar respuesta: {str(e)}", exc_info=True)
+        return "No pude procesar la solicitud en este momento. Por favor, intenta con otra pregunta."
 
 def _format_sources(sources: List[str]) -> str:
     """Formatea la información de fuentes para la respuesta."""
@@ -88,13 +164,13 @@ def _create_citations(search_results: Dict[str, Any]) -> List[AnswerCitation]:
 
 async def answer_question(question: str) -> QAResponse:
     """
-    Responde una pregunta basándose en los documentos disponibles.
+    Responde una pregunta usando el modelo de lenguaje con el contenido completo de los documentos.
     
     Args:
         question: La pregunta a responder
         
     Returns:
-        QAResponse: La respuesta generada con metadatos y citas
+        QAResponse: La respuesta generada con metadatos
         
     Raises:
         NoDocumentsLoadedError: Si no hay documentos cargados en el sistema
@@ -107,51 +183,57 @@ async def answer_question(question: str) -> QAResponse:
             
         logger.info(f"Procesando pregunta: {question}")
         
-        # Asegurarse de que el índice esté actualizado
-        search_service.reload_documents()
+        # Obtener todos los documentos del servicio de búsqueda
+        if not hasattr(search_service, 'doc_metadata') or not search_service.doc_metadata:
+            return QAResponse(
+                answer="No hay documentos cargados en el sistema.",
+                citations=[],
+                hasEnoughContext=False,
+                question=question
+            )
         
-        # Buscar pasajes relevantes
-        search_results = search_service.search(question, page=1, page_size=3)
+        # Obtener el contenido completo de todos los documentos únicos
+        unique_docs = {}
+        for doc in search_service.doc_metadata:
+            doc_id = doc.get('document_id')
+            if doc_id not in unique_docs:
+                unique_docs[doc_id] = {
+                    'content': doc.get('text', ''),
+                    'source': doc.get('document_name', 'Documento desconocido')
+                }
         
-        # Verificar si hay resultados
-        if not search_results or not search_results.get('results'):
-            return "No encuentro suficiente información en los documentos cargados para responder a tu pregunta."
+        if not unique_docs:
+            return QAResponse(
+                answer="No hay contenido disponible en los documentos cargados.",
+                citations=[],
+                hasEnoughContext=False,
+                question=question
+            )
         
-        # Filtrar resultados por puntuación de confianza
-        relevant_results = [
-            result for result in search_results['results']
-            if result.get('relevanceScore', 0) >= SEARCH_CONFIG['min_confidence']
-        ]
+        # Crear lista de contextos con contenido completo de cada documento
+        context = list(unique_docs.values())
         
-        # Crear citas para los resultados relevantes
-        citations = _create_citations({'results': relevant_results})
-        
-        # Formatear contexto para el LLM
-        context = []
-        
-        for result in relevant_results:
-            context.append({
-                'content': result.get('text', ''),
-                'source': result.get('documentName', 'Documento desconocido')
-            })
-        
-        # Generar respuesta usando el contexto
+        # Generar respuesta usando el LLM con todo el contenido
         answer_text = await _generate_answer_with_llm(question, context)
         
-        # Si no hay contexto relevante, devolver un mensaje predeterminado
-        if not context:
-            answer_text = "No encuentro esa información en los documentos cargados."
+        # Crear citas para los documentos usados como contexto
+        citations = []
+        for doc in list(unique_docs.values())[:3]:  # Limitar a 3 documentos como referencia
+            citations.append(AnswerCitation(
+                source=doc['source'],
+                content=doc['content'][:200] + '...' if len(doc['content']) > 200 else doc['content'],
+                page=None,
+                score=1.0
+            ))
         
-        sources = list(set([doc['source'] for doc in context if 'source' in doc]))
         return QAResponse(
-            answer=answer_text + _format_sources(sources),
+            answer=answer_text,
             citations=citations,
             hasEnoughContext=len(context) > 0,
             question=question
         )
             
     except NoDocumentsLoadedError as ndle:
-        # Este error ya está registrado en la clase de excepción
         return QAResponse(
             answer=str(ndle),
             citations=[],
