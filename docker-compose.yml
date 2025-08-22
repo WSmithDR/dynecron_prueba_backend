@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dynecron_prueba_backend
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/venv
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - PYTHONPATH=/app
+    restart: unless-stopped
+    networks:
+      - backend_network
+      - shared_network
+
+networks:
+  backend_network:
+    name: dynecron_backend_network
+    driver: bridge
+  shared_network:
+    name: dynecron_shared_network
+    driver: bridge
