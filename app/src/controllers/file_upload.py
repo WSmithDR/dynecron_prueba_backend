@@ -5,7 +5,7 @@ import asyncio
 import logging
 
 from ..services.file_service import FileService
-from ..services.search_service import search_service
+from ..services.search_service import load_all_documents as reload_search_index
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -75,7 +75,7 @@ async def procesar_archivos(
         # Si se procesó al menos un archivo correctamente, recargar el índice de búsqueda
         if any_success:
             try:
-                search_service.reload_documents()
+                reload_search_index()
                 logger.info("Índice de búsqueda actualizado correctamente")
             except Exception as e:
                 logger.error(f"Error al actualizar el índice de búsqueda: {str(e)}")

@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, List, Any, Tuple
-from ..services.search_service import search_service
+from ..services.search_service import _state as search_state
 from ..models.qa_models import QAResponse, AnswerCitation
 from ..exceptions.qa_exceptions import NoDocumentsLoadedError, AnswerGenerationError
 from ..utils.qa_utils import (
@@ -25,7 +25,8 @@ async def answer_question(question: str) -> QAResponse:
         logger.info(f"Procesando pregunta: {question}")
         
         # Obtener todos los documentos del servicio de búsqueda
-        if not hasattr(search_service, 'doc_metadata') or not search_service.doc_metadata:
+        doc_metadata = search_state.get('doc_metadata', [])
+        if not doc_metadata:
             return QAResponse(
                 answer="No hay documentos cargados en el sistema.",
                 citations=[],
@@ -35,7 +36,7 @@ async def answer_question(question: str) -> QAResponse:
         
         # Obtener el contenido completo de todos los documentos únicos
         unique_docs = {}
-        for doc in search_service.doc_metadata:
+        for doc in doc_metadata:
             doc_id = doc.get('document_id')
             if doc_id not in unique_docs:
                 unique_docs[doc_id] = {
