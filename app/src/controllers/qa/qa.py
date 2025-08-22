@@ -1,9 +1,8 @@
-from fastapi import APIRouter, HTTPException, status, Request, Depends
-from typing import Awaitable, Dict, Any, Optional
+from fastapi import APIRouter
 import logging
 
-from app.src.models.qa_models import QAResponse, QARequest, AnswerCitation
-from ..services.qa_service import answer_question, NoDocumentsLoadedError
+from app.src.models.qa_models import QAResponse, QARequest
+from app.src.services.qa_service import answer_question, NoDocumentsLoadedError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
