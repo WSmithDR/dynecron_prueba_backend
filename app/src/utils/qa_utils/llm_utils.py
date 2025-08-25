@@ -13,11 +13,19 @@ async def generate_answer_with_llm(question: str, context: List[Dict[str, Any]])
         return "No encuentro información en los documentos cargados.", []
 
     try:
-        # Tomar el primer documento del contexto
-        json_data = context[0].get('content', {})
+        # Procesar todos los documentos del contexto
+        all_formatted_data = []
+        for doc in context:
+            json_data = doc.get('content', {})
+            if json_data:  # Solo agregar si hay contenido
+                formatted_data = format_json_for_prompt(json_data)
+                all_formatted_data.append(formatted_data)
         
-        # Formatear los datos JSON para el prompt
-        formatted_data = format_json_for_prompt(json_data)
+        if not all_formatted_data:
+            return "No se encontró contenido válido en los documentos.", []
+
+        # Unir todos los datos formateados
+        combined_data = "\n\n".join(all_formatted_data)
 
         # Crear el mensaje para el modelo
         messages = [
@@ -32,7 +40,7 @@ async def generate_answer_with_llm(question: str, context: List[Dict[str, Any]])
                 "content": f"""Analiza los siguientes datos y responde la pregunta de manera concisa.
                 
 Datos:
-{formatted_data}
+{combined_data}
 
 Pregunta: {question}
 
