@@ -1,79 +1,16 @@
-version: '3.8'
-
 services:
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: production
-    container_name: dynecron_prueba_backend
-    working_dir: /app
-    volumes:
-      - ./logs:/app/logs
-      - ./static:/app/static
-      - ./media:/app/media
+    build: .
+    container_name: dynecron_backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
-    environment:
-      - ENVIRONMENT=${ENVIRONMENT:-production}
-      - DEBUG=${DEBUG:-0}
-      - SECRET_KEY=${SECRET_KEY:-your-secret-key-here}
-      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/dynecron_db}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
-    restart: unless-stopped
-    depends_on:
-      - db
-      - redis
+    env_file:
+      - .env
     networks:
-      - backend_network
-      - shared_network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
-  db:
-    image: postgres:15-alpine
-    container_name: dynecron_db
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB:-dynecron_db}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-    networks:
-      - backend_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: dynecron_redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-your-redis-password}
-    volumes:
-      - redis_data:/data
-    networks:
-      - backend_network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      - dynecron_network
 
 networks:
-  backend_network:
-    name: dynecron_backend_network
-    driver: bridge
-  shared_network:
-    name: dynecron_shared_network
+  dynecron_network:
     external: true
-
-volumes:
-  postgres_data:
-  redis_data:
+    name: dynecron_network

@@ -1,8 +1,3 @@
-"""
-Configuration settings for the application.
-
-This module contains all the configuration constants used throughout the application.
-"""
 from pathlib import Path
 
 # Base directory of the project
