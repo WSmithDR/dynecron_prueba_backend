@@ -1,7 +1,6 @@
 import logging
-from typing import Dict, List, Any, Tuple
 from ..services.search_service import _state as search_state
-from ..models.qa_models import QAResponse, AnswerCitation
+from ..models.qa_models import QAResponse
 from ..exceptions.qa_exceptions import NoDocumentsLoadedError, AnswerGenerationError
 from ..utils.qa_utils import (
     check_documents_exist, 

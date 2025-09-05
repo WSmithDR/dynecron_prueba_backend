@@ -3,10 +3,8 @@ import os
 import re
 import json
 import logging
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any
 from pathlib import Path
-from dataclasses import dataclass, field
-from functools import lru_cache
 
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
