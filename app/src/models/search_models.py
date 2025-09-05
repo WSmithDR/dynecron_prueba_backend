@@ -1,9 +1,3 @@
-
-"""
-Search-related Pydantic models.
-
-This module contains all Pydantic models related to search functionality.
-"""
 from pydantic import BaseModel, Field
 from typing import List, Literal, Optional, Dict, Any
 from datetime import datetime
