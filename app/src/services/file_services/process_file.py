@@ -1,16 +1,11 @@
-import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from fastapi import UploadFile, HTTPException, status
 
 from .extract_text import extract_text_from_pdf
 from .save_document import save_document
+from .is_extension_allowed import is_extension_allowed
 
-# Configuration
-ALLOWED_EXTENSIONS = {"pdf", "txt"}
 MAX_FILE_SIZE = 1024 * 1024 * 1024  # 1GB
-
-def is_extension_allowed(filename: str) -> bool:
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 async def process_uploaded_file(upload_folder: str, file: UploadFile) -> Dict[str, Any]:
     try:
